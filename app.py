@@ -120,7 +120,6 @@ def carregar():
 
 steam, tags = carregar()
 
-# Valores absolutos (para limites dos sliders)
 PRECO_MAX   = float(steam["price"].max())
 HORAS_MAX   = float(steam["horas_jogadas"].max())
 
@@ -130,7 +129,7 @@ todos_generos = sorted(
 )
 
 # =====================================
-# SIDEBAR — só ano
+# SIDEBAR
 # =====================================
 
 st.sidebar.header("🔧 Filtros")
@@ -158,13 +157,25 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Visão Geral", "🎮 Engajamento", "🏷️ Tags", "💰 Sucesso Comercial"
 ])
 
+# ── helper: ordena do maior para o menor no eixo Y ──────────────────────────
+def bar_h(df, x, y, **kwargs):
+    """
+    Gráfico de barras horizontal com o maior valor no topo.
+    Recebe df já filtrado/agregado. Ordena crescente para o px.bar
+    (Plotly inverte o eixo Y, então crescente = maior no topo).
+    Garante category_orders para evitar reordenação alfabética.
+    """
+    ordered = df.sort_values(x, ascending=False)
+    category_orders = {y: ordered[y].tolist()}
+    return px.bar(ordered, x=x, y=y, orientation="h",
+                  category_orders=category_orders, **kwargs)
+
 # ======================================
 # TAB 1 — VISÃO GERAL
 # ======================================
 
 with tab1:
 
-    # ── Jogos lançados por ano ──────────────────────────────────────────
     st.subheader("📅 Jogos Lançados por Ano")
     jogos_ano = df_base.groupby("ano").size().reset_index(name="Quantidade")
     fig = px.line(jogos_ano, x="ano", y="Quantidade", markers=True)
@@ -172,9 +183,7 @@ with tab1:
 
     st.divider()
 
-    # ── Distribuição de preços ──────────────────────────────────────────
     st.subheader("💲 Distribuição dos Preços")
-
     col_f1, col_f2 = st.columns([3, 1])
     with col_f1:
         preco_hist = st.slider(
@@ -193,9 +202,7 @@ with tab1:
 
     st.divider()
 
-    # ── Plataformas ─────────────────────────────────────────────────────
     st.subheader("🖥️ Suporte por Plataforma")
-
     plat_counts = {
         "Windows": df_base["platforms"].str.contains("windows", case=False, na=False).sum(),
         "Mac":     df_base["platforms"].str.contains("mac",     case=False, na=False).sum(),
@@ -212,25 +219,19 @@ with tab1:
 
     st.divider()
 
-    # ── Top gêneros por quantidade de jogos ────────────────────────────
     st.subheader("🎭 Gêneros Mais Comuns")
-
     gen_count = (
         df_base["genres"].dropna()
         .str.split(";").explode().str.strip()
         .value_counts().head(15).reset_index()
     )
     gen_count.columns = ["Gênero", "Quantidade"]
-
-    fig = px.bar(gen_count.sort_values("Quantidade"),
-                 x="Quantidade", y="Gênero", orientation="h")
+    fig = bar_h(gen_count, x="Quantidade", y="Gênero")
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
 
-    # ── Aprovação média por gênero ─────────────────────────────────────
     st.subheader("⭐ Aprovação Média por Gênero")
-
     gen_aprov = df_base[["genres", "approval_rate"]].dropna().copy()
     gen_aprov["genres"] = gen_aprov["genres"].str.split(";")
     gen_aprov = gen_aprov.explode("genres")
@@ -241,19 +242,15 @@ with tab1:
     )
     gen_aprov.columns = ["Gênero", "Aprovação (%)"]
     gen_aprov["Aprovação (%)"] = gen_aprov["Aprovação (%)"].round(1)
-
-    fig = px.bar(gen_aprov.sort_values("Aprovação (%)"),
-                 x="Aprovação (%)", y="Gênero", orientation="h",
-                 color="Aprovação (%)", color_continuous_scale="Greens")
+    fig = bar_h(gen_aprov, x="Aprovação (%)", y="Gênero",
+                color="Aprovação (%)", color_continuous_scale="Greens")
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
 
-    # ── Conquistas ─────────────────────────────────────────────────────
     st.subheader("🏅 Conquistas (Achievements)")
-
     col_a1, col_a2, col_a3 = st.columns(3)
-    col_a1.metric("Média de Conquistas", f"{df_base['achievements'].mean():.0f}")
+    col_a1.metric("Média de Conquistas",  f"{df_base['achievements'].mean():.0f}")
     col_a2.metric("Máximo de Conquistas", f"{int(df_base['achievements'].max()):,}".replace(",", "."))
     col_a3.metric("Jogos com Conquistas", f"{int((df_base['achievements'] > 0).sum()):,}".replace(",", "."))
 
@@ -265,16 +262,13 @@ with tab1:
 
     st.divider()
 
-    # ── Evolução do preço médio por ano ────────────────────────────────
     st.subheader("📊 Evolução do Preço Médio por Ano")
-
     preco_ano = (
         df_base[df_base["price"] > 0]
         .groupby("ano")["price"].mean()
         .reset_index()
     )
     preco_ano.columns = ["Ano", "Preço Médio (US$)"]
-
     fig = px.line(preco_ano, x="Ano", y="Preço Médio (US$)", markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -285,7 +279,6 @@ with tab1:
 with tab2:
 
     st.subheader("⏱️ Tempo Médio de Jogo por Gênero")
-
     genero_df = df_base[["genres", "horas_jogadas"]].dropna().copy()
     genero_df["genres"] = genero_df["genres"].str.split(";")
     genero_df = genero_df.explode("genres")
@@ -294,9 +287,9 @@ with tab2:
         .mean().sort_values(ascending=False)
         .head(15).reset_index()
     )
-    fig = px.bar(genero_media.sort_values("horas_jogadas"),
-                 x="horas_jogadas", y="genres", orientation="h",
-                 labels={"genres": "Gênero", "horas_jogadas": "Horas"})
+    genero_media.columns = ["Gênero", "Horas"]
+    fig = bar_h(genero_media, x="Horas", y="Gênero",
+                labels={"Horas": "Horas", "Gênero": "Gênero"})
     st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
@@ -308,9 +301,7 @@ with tab2:
 
     st.divider()
 
-    # ── Ranking com filtros ────────────────────────────────────────────
     st.subheader("🏆 Ranking de Jogos por Tempo Médio de Jogo")
-
     with st.expander("⚙️ Filtros do Ranking", expanded=True):
         col_r1, col_r2, col_r3, col_r4 = st.columns(4)
         with col_r1:
@@ -346,16 +337,15 @@ with tab2:
     if top.empty:
         st.warning("Nenhum jogo encontrado com os filtros selecionados.")
     else:
-        fig = px.bar(top.sort_values("horas_jogadas"),
-                     x="horas_jogadas", y="name", orientation="h",
-                     labels={"horas_jogadas": "Horas Jogadas", "name": "Jogo"})
+        fig = bar_h(top, x="horas_jogadas", y="name",
+                    labels={"horas_jogadas": "Horas Jogadas", "name": "Jogo"})
         st.plotly_chart(fig, use_container_width=True)
 
         tabela_top = top[["name", "horas_jogadas", "approval_rate", "price", "genres"]].copy()
         tabela_top.columns = ["Jogo", "Horas Jogadas", "Aprovação (%)", "Preço (US$)", "Gêneros"]
-        tabela_top["Horas Jogadas"]  = tabela_top["Horas Jogadas"].round(1)
-        tabela_top["Aprovação (%)"]  = tabela_top["Aprovação (%)"].round(1)
-        tabela_top["Preço (US$)"]    = tabela_top["Preço (US$)"].apply(
+        tabela_top["Horas Jogadas"] = tabela_top["Horas Jogadas"].round(1)
+        tabela_top["Aprovação (%)"] = tabela_top["Aprovação (%)"].round(1)
+        tabela_top["Preço (US$)"]   = tabela_top["Preço (US$)"].apply(
             lambda x: "Grátis" if x == 0 else f"US$ {x:.2f}"
         )
         st.dataframe(tabela_top, use_container_width=True)
@@ -372,8 +362,7 @@ with tab3:
         .sort_values(ascending=False).head(20).reset_index()
     )
     freq.columns = ["Característica", "Pontuação"]
-    fig = px.bar(freq.sort_values("Pontuação"),
-                 x="Pontuação", y="Característica", orientation="h")
+    fig = bar_h(freq, x="Pontuação", y="Característica")
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(freq, use_container_width=True)
 
@@ -392,9 +381,11 @@ with tab4:
     idx     = pub_gen.groupby("editor")["owners_min"].idxmax()
     top_genero_pub = pub_gen.loc[idx].sort_values("owners_min", ascending=False).head(20)
 
+    ordered_pub = top_genero_pub.sort_values("owners_min", ascending=False)
     fig = px.bar(
-        top_genero_pub.sort_values("owners_min"),
+        ordered_pub,
         x="owners_min", y="editor", color="genres", orientation="h",
+        category_orders={"editor": ordered_pub["editor"].tolist()},
         labels={"owners_min": "Cópias Vendidas", "editor": "Publicadora", "genres": "Gênero"},
         title="Gênero de Maior Sucesso por Publicadora"
     )
@@ -419,9 +410,11 @@ with tab4:
     idx     = dev_gen.groupby("desenvolvedor")["owners_min"].idxmax()
     top_genero_dev = dev_gen.loc[idx].sort_values("owners_min", ascending=False).head(20)
 
+    ordered_dev = top_genero_dev.sort_values("owners_min", ascending=False)
     fig = px.bar(
-        top_genero_dev.sort_values("owners_min"),
+        ordered_dev,
         x="owners_min", y="desenvolvedor", color="genres", orientation="h",
+        category_orders={"desenvolvedor": ordered_dev["desenvolvedor"].tolist()},
         labels={"owners_min": "Cópias Vendidas", "desenvolvedor": "Desenvolvedora", "genres": "Gênero"},
         title="Gênero de Maior Sucesso por Desenvolvedora"
     )
@@ -452,20 +445,14 @@ with tab4:
     st.subheader("🔍 Explorar Jogos por Empresa")
 
     col_tipo, col_empresa = st.columns([1, 3])
-
     with col_tipo:
         tipo_empresa = st.radio(
-            "Tipo",
-            ["Publicadora", "Desenvolvedora"],
-            horizontal=False,
-            key="tipo_empresa"
+            "Tipo", ["Publicadora", "Desenvolvedora"],
+            horizontal=False, key="tipo_empresa"
         )
 
     coluna_empresa = "editor" if tipo_empresa == "Publicadora" else "desenvolvedor"
-
-    lista_empresas = sorted(
-        df_base[coluna_empresa].dropna().unique()
-    )
+    lista_empresas = sorted(df_base[coluna_empresa].dropna().unique())
 
     with col_empresa:
         empresa_sel = st.selectbox(
@@ -477,14 +464,12 @@ with tab4:
 
     df_empresa = df_base[df_base[coluna_empresa] == empresa_sel].copy()
 
-    # KPIs da empresa
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total de Jogos",     f"{len(df_empresa)}")
-    k2.metric("Cópias Vendidas",    f"{df_empresa['owners_min'].sum()/1_000_000:.1f} Mi")
-    k3.metric("Aprovação Média",    f"{df_empresa['approval_rate'].mean():.1f}%")
-    k4.metric("Preço Médio",        f"US$ {df_empresa['price'].mean():.2f}")
+    k1.metric("Total de Jogos",  f"{len(df_empresa)}")
+    k2.metric("Cópias Vendidas", f"{df_empresa['owners_min'].sum()/1_000_000:.1f} Mi")
+    k3.metric("Aprovação Média", f"{df_empresa['approval_rate'].mean():.1f}%")
+    k4.metric("Preço Médio",     f"US$ {df_empresa['price'].mean():.2f}")
 
-    # Ordenação
     ordem_opcoes = {
         "Cópias Vendidas":   "owners_min",
         "Horas Jogadas":     "horas_jogadas",
@@ -508,13 +493,11 @@ with tab4:
     if df_empresa_top.empty:
         st.warning("Nenhum jogo encontrado para esta empresa com os filtros atuais.")
     else:
-        # Gráfico de barras — métrica escolhida
+        ordered_emp = df_empresa_top.sort_values(col_ordem, ascending=False)
         fig = px.bar(
-            df_empresa_top.sort_values(col_ordem),
-            x=col_ordem,
-            y="name",
-            color="genres",
-            orientation="h",
+            ordered_emp,
+            x=col_ordem, y="name", color="genres", orientation="h",
+            category_orders={"name": ordered_emp["name"].tolist()},
             hover_data=["price", "approval_rate", "horas_jogadas"],
             labels={
                 col_ordem:       ordem_label,
@@ -529,15 +512,11 @@ with tab4:
         fig.update_layout(height=max(400, top_n_emp * 28), margin=dict(l=250))
         st.plotly_chart(fig, use_container_width=True)
 
-        # Scatter aprovação x horas jogadas
         st.markdown("##### Aprovação × Horas Jogadas")
         fig2 = px.scatter(
             df_empresa_top,
-            x="approval_rate",
-            y="horas_jogadas",
-            size="owners_min",
-            color="genres",
-            hover_name="name",
+            x="approval_rate", y="horas_jogadas",
+            size="owners_min", color="genres", hover_name="name",
             labels={
                 "approval_rate": "Taxa de Aprovação (%)",
                 "horas_jogadas": "Horas Jogadas",
@@ -547,19 +526,18 @@ with tab4:
         )
         st.plotly_chart(fig2, use_container_width=True)
 
-        # Tabela completa
         tabela_emp = df_empresa_top[[
             "name", "genres", "horas_jogadas", "approval_rate", "price", "owners_min"
         ]].copy()
         tabela_emp.columns = [
             "Jogo", "Gêneros", "Horas Jogadas", "Aprovação (%)", "Preço (US$)", "Cópias Vendidas"
         ]
-        tabela_emp["Horas Jogadas"]    = tabela_emp["Horas Jogadas"].round(1)
-        tabela_emp["Aprovação (%)"]    = tabela_emp["Aprovação (%)"].round(1)
-        tabela_emp["Preço (US$)"]      = tabela_emp["Preço (US$)"].apply(
+        tabela_emp["Horas Jogadas"]   = tabela_emp["Horas Jogadas"].round(1)
+        tabela_emp["Aprovação (%)"]   = tabela_emp["Aprovação (%)"].round(1)
+        tabela_emp["Preço (US$)"]     = tabela_emp["Preço (US$)"].apply(
             lambda x: "Grátis" if x == 0 else f"US$ {x:.2f}"
         )
-        tabela_emp["Cópias Vendidas"]  = tabela_emp["Cópias Vendidas"].apply(
+        tabela_emp["Cópias Vendidas"] = tabela_emp["Cópias Vendidas"].apply(
             lambda x: f"{x:,.0f}".replace(",", ".")
         )
         st.dataframe(tabela_emp, use_container_width=True)
@@ -570,8 +548,8 @@ with tab4:
 
 st.divider()
 
-jogo_top    = df_base.sort_values("horas_jogadas", ascending=False).iloc[0]
-mais_vendido = df_base.sort_values("owners_min",   ascending=False).iloc[0]
+jogo_top     = df_base.sort_values("horas_jogadas", ascending=False).iloc[0]
+mais_vendido = df_base.sort_values("owners_min",    ascending=False).iloc[0]
 
 col1, col2 = st.columns(2)
 with col1:
